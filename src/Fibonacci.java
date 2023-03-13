@@ -1,96 +1,105 @@
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
 public class Fibonacci {
-    private long[] cache;
-    private int cacheSize;
-    private int cacheHits;
-    boolean useCache = true;
+    public enum CacheType { NONE, SIMPLE, OPTIMAL, PERSISTENT}
+
+    private final CacheType cacheType;
+    private boolean useCache = true;
+
+    int cacheHits = 0;
+    int calls = 0;
+    FibCache cache;
+
+    public Fibonacci(CacheType cacheType) {
+        this.cacheType = cacheType;
+    }
 
     public long fibonacci(int n) {
-        cache = new long[n + 1];
-        cacheSize = 0;
-        cacheHits = 0;
-        long f = fib(n);
-        System.out.println("Cache hits: " + cacheHits);
+        cache = switch (cacheType) {
+            case NONE -> null;
+            case SIMPLE -> new FibCacheArray(n + 1);
+            case OPTIMAL -> new FibCacheOptimal();
+            case PERSISTENT -> new FibCachePersistent();
+        };
 
-        return f;
+        if (cache == null) {
+            useCache = false;
+        }
+
+        return fib(n);
     }
 
     private long fib(int n) {
-        if (useCache && cacheSize > n) {
+        calls++;
+        if (useCache && cache.size() > n) {
             // Value should be in the cache
             cacheHits++;
-            return cache[n];
+            return cache.get(n).orElse(-1L);
         }
 
-        long f;
-        switch (n) {
-            case 0: f = 0; break;
-            case 1: f = 1; break;
-            default:
-                f = fib(n - 2) + fib(n - 1);
-                break;
+        long f = switch (n) {
+            case 0 -> 0;
+            case 1 -> 1;
+            default -> fib(n - 2) + fib(n - 1);
+        };
+
+        if (useCache) {
+            cache.put(n, f);
         }
 
-        cache[n] = f;
-        cacheSize++;
         return f;
     }
 
+    static int[] testNumbers = new int[] {0, 1, 2, 3, 4, 5, 10, 20, 30, 50};
+    static int[] debugNumbers = new int[] {2};
 
-    static class FibCache {
-        private int previous;
-        private int current;
-        private int size;
+    public static void main(String[] args) {
+        boolean debug = false;
 
-        FibCache() {
-            previous = 0;
-            current = 1;
-            size = 2;
-        }
+        if (debug) {
+            Fibonacci fibWithOptCache = new Fibonacci(CacheType.OPTIMAL);
+            System.out.println("Fibonacci with optimal cache");
+            for (int n : debugNumbers) {
+                runFib(fibWithOptCache, n);
+            }
+        } else {
+            Fibonacci fib = new Fibonacci(CacheType.NONE);
+            System.out.println("Fibonacci with no cache");
+            for (int n : testNumbers) {
+                if (n < 50) {
+                    runFib(fib, n);
+                }
+            }
+            System.out.println();
 
-        int size() { return size; }
+            Fibonacci fibWithCache = new Fibonacci(CacheType.SIMPLE);
+            System.out.println("Fibonacci with cache");
+            for (int n : testNumbers) {
+                runFib(fibWithCache, n);
+            }
+            System.out.println();
 
-        Optional<Integer> get(Integer n) {
-            if (n >= size) {
-                return Optional.empty();
+            Fibonacci fibWithOptCache = new Fibonacci(CacheType.OPTIMAL);
+            System.out.println("Fibonacci with optimal cache");
+            for (int n : testNumbers) {
+                runFib(fibWithOptCache, n);
+            }
+            System.out.println();
+
+            Fibonacci fibWithPersistentCache = new Fibonacci(CacheType.PERSISTENT);
+            System.out.println("Fibonacci with persistent cache");
+            for (int n : testNumbers) {
+                runFib(fibWithPersistentCache, n);
             }
 
-            if (n == size - 1) {
-                return Optional.of(current);
-            }
-
-            if (n == size - 2) {
-                return Optional.of(previous);
-            }
-
-            return Optional.empty();
-        }
-
-        void put(int idx, int n) {
-            if (idx != size) {
-                System.out.println("Error: using bad index: " + idx + " size: " + size);
-                return;
-            }
-
-            previous = current;
-            current = idx;
-            size++;
         }
     }
 
-    public static void main(String[] args) {
-        Fibonacci fib = new Fibonacci();
-
-        int n = 100;
-
+    private static void runFib(Fibonacci fib, int n) {
         long startTime = System.nanoTime();
         long f = fib.fibonacci(n);
         long endTime = System.nanoTime();
 
         long duration = (endTime - startTime) / 1000000;
-        System.out.println("Fibonacci(" + n + ") = " + f + " in " + duration + "ms");
+        System.out.printf("Fibonacci(%d) = %d in %d ms calls: %d cache hits: %d\n",
+                n, f, duration, fib.calls, fib.cacheHits);
     }
 }
